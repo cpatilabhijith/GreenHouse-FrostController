@@ -1,0 +1,48 @@
+============================================================
+GATE-LEVEL SIMULATION (GLS) REPORT
+Greenhouse Frost Protection Window Controller
+============================================================
+
+TOOL:      Icarus Verilog 10.1
+NETLIST:   synthesis/mapped_greenhouse_frost_controller.v
+TB:        gls/greenhouse_gls_tb.v
+LIBRARIES: $PDK_ROOT/sky130A/libs.ref/sky130_fd_sc_hd/verilog/
+           - primitives.v
+           - sky130_fd_sc_hd.v (patched lines 955, 1097)
+OVERRIDE:  gls/ff_override.v (functional FF - timing via STA)
+
+COMPILE COMMAND:
+  iverilog -g2012 -DSKY130_FD_SC_HD__DFXTP_1_V -o greenhouse_gls.vvp \
+    primitives.v sky130_fd_sc_hd.v ff_override.v \
+    mapped_greenhouse_frost_controller.v greenhouse_gls_tb.v
+
+RUN COMMAND:
+  vvp greenhouse_gls.vvp
+
+RESULT:
+  Tests: 10
+  Passed: 10
+  Failed: 0
+
+------------------------------------------------------------
+Test-by-test results:
+------------------------------------------------------------
+Test 1  - Reset behavior during assertion        PASSED
+Test 2  - 8 C -> OPEN                            PASSED
+Test 3  - 2 C -> CLOSED                          PASSED
+Test 4  - 0 C -> frost alarm + CLOSED            PASSED
+Test 5  - 5 C -> OPEN (hysteresis upper)         PASSED
+Test 6  - Manual close override                  PASSED
+Test 7  - Manual release -> OPEN                 PASSED
+Test 8  - Dead-band 3 C, previous=OPEN, hold     PASSED
+Test 9  - Dead-band 3 C, previous=CLOSED, hold   PASSED
+Test 10 - Motor interlock (never both ON)        PASSED
+
+------------------------------------------------------------
+RTL vs GLS Comparison:
+------------------------------------------------------------
+                RTL (sim/rtl/)    GLS (gls/)
+All 10 tests    PASS              PASS
+Overall         10/10             10/10   -> MATCH
+
+============================================================

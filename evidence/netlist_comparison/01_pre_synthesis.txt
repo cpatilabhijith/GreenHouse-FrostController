@@ -1,0 +1,20 @@
+   Number of cells:                 82
+     $_ANDNOT_                      43
+     $_AND_                          1
+     $_DFF_P_                        2
+     $_NAND_                         5
+     $_NOR_                          6
+     $_NOT_                          3
+     $_ORNOT_                        7
+     $_OR_                          15
+
+3.26. Executing CHECK pass (checking for obvious problems).
+Checking module greenhouse_frost_controller...
+Found and reported 0 problems.
+--
+   Number of cells:                 25
+     sky130_fd_sc_hd__a211oi_1       1
+     sky130_fd_sc_hd__a21oi_1        1
+     sky130_fd_sc_hd__a31oi_1        2
+     sky130_fd_sc_hd__clkinv_1       1
+     sky130_fd_sc_hd__dfxtp_1        2

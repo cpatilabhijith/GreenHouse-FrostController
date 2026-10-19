@@ -1,0 +1,19 @@
+# Read RTL
+read_verilog ../rtl/greenhouse_frost_controller.v
+
+# Elaborate design
+hierarchy -check -top greenhouse_frost_controller
+
+# Synthesize to generic gates
+synth -top greenhouse_frost_controller
+
+# Map flip-flops to library sequential cells (absolute path — no env expansion)
+dfflibmap -liberty /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+# Map combinational logic to library gates via ABC (absolute path)
+abc -liberty /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+# Clean up and write results
+opt_clean
+write_verilog -noattr ./mapped_greenhouse_frost_controller.v
+stat
