@@ -1,4 +1,7 @@
 # 🌱 Greenhouse Frost Protection Window Controller
+<img width="1500" height="1200" alt="image" src="https://github.com/user-attachments/assets/4f944113-dcd0-4d11-82bb-e121224c6db8" />
+
+
 
 **RTL-to-GDSII ASIC design on SkyWater SKY130 (`sky130_fd_sc_hd`)**
 
