@@ -270,26 +270,55 @@ The pre-layout and post-layout plots provide a visual comparison of timing margi
 ## 9. How to Reproduce
 
 ```bash
-# 1. RTL simulation
-iverilog -g2012 -o tb.vvp rtl/*.v tb/*.v && vvp tb.vvp
+#!/bin/bash
+# ==============================================================================
+# APPENDIX C: COMPLETE COMMANDS TO REPRODUCE RTL-TO-GDSII FLOW
+# Project: Greenhouse Frost Protection Window Controller
+# ==============================================================================
 
-# 2. Synthesis
-cd synthesis && yosys -l synth.log synth.ys
+cd ~/Desktop/Greenhouse_Frost_Controller
 
-# 3. Pre-layout STA
-# Run OpenSTA with constraints/SDC over the 16 SKY130 corners (see timing/prelayout).
+# Define all 16 SKY130 PVT corners
+CORNERS=(tt_025C_1v80 tt_100C_1v80 ss_100C_1v40 ss_100C_1v60 ss_n40C_1v28 ss_n40C_1v35 ss_n40C_1v40 ss_n40C_1v44 ss_n40C_1v60 ss_n40C_1v76 ff_100C_1v65 ff_100C_1v95 ff_n40C_1v56 ff_n40C_1v65 ff_n40C_1v76 ff_n40C_1v95)
 
-# 4. Gate-level simulation
-iverilog -g2012 -DSKY130_FD_SC_HD__DFXTP_1_V -o greenhouse_gls.vvp \
-  primitives.v sky130_fd_sc_hd.v evidence/gls/ff_override.v \
-  synthesis/mapped_greenhouse_frost_controller.v <gls_testbench>.v
+# 1. RTL SIMULATION
+iverilog -g2012 -o sim/rtl/rtl_sim.vvp rtl/greenhouse_frost_controller.v tb/greenhouse_frost_controller_tb.v
+cd sim/rtl && vvp rtl_sim.vvp
+cd ~/Desktop/Greenhouse_Frost_Controller
+
+# 2. LOGIC SYNTHESIS
+cd synthesis
+yosys -l synth.log synth.ys
+cd ~/Desktop/Greenhouse_Frost_Controller
+
+# 3. PRE-LAYOUT STA
+export NETLIST_FILE="$PWD/synthesis/mapped_greenhouse_frost_controller.v"
+export SDC_FILE="$PWD/constraints/greenhouse_frost_controller.sdc"
+for c in "${CORNERS[@]}"; do
+  export LIB_FILE="/home/vscode/Desktop/OpenROAD-flow-scripts/flow/skywater-pdk-libs-sky130_fd_sc_hd/timing/sky130_fd_sc_hd__${c}.lib"
+  sta -no_splash -exit timing/prelayout/run_one.tcl > timing/prelayout/${c}.log
+done
+
+# 4. GATE-LEVEL SIMULATION (GLS)
+cd gls
+iverilog -g2012 -DSKY130_FD_SC_HD__DFXTP_1_V -o greenhouse_gls.vvp primitives.v sky130_fd_sc_hd.v ff_override.v mapped_greenhouse_frost_controller.v greenhouse_gls_tb.v
 vvp greenhouse_gls.vvp
+cd ~/Desktop/Greenhouse_Frost_Controller
 
-# 5. Physical design (OpenLane v0.21, Docker)
-# PDK = sky130A, DIE_AREA = 0 0 100 100, config in openlane/
+# 5. PHYSICAL DESIGN (OPENLANE)
+docker run --rm -it \
+  -v /home/vscode/Desktop/work/tools/openlane_working_dir/openlane:/openLANE_flow \
+  -v /home/vscode/Desktop/work/tools/openlane_working_dir/pdks:/pdks \
+  -v /home/vscode/Desktop/Greenhouse_Frost_Controller:/project \
+  efabless/openlane:v0.21 bash -c "cd /openLANE_flow && ./flow.tcl -design /project/openlane -tag gh_100_v1"
 
-# 6. Post-layout STA
-# Run OpenSTA with extracted SPEF over the 16 corners (see timing/postlayout).
+# 6. POST-LAYOUT STA
+export NETLIST_FILE="$PWD/openlane/runs/gh_100_v1/results/synthesis/greenhouse_frost_controller.synthesis_preroute.v"
+export SPEF_FILE="$PWD/openlane/runs/gh_100_v1/results/routing/greenhouse_frost_controller.spef"
+for c in "${CORNERS[@]}"; do
+  export LIB_FILE="/home/vscode/Desktop/OpenROAD-flow-scripts/flow/skywater-pdk-libs-sky130_fd_sc_hd/timing/sky130_fd_sc_hd__${c}.lib"
+  openroad -no_init -exit timing/postlayout/run_one.tcl > timing/postlayout/${c}.log
+done
 ```
 
 ---
