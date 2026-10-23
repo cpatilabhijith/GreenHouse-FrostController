@@ -1,7 +1,6 @@
 # 🌱 Greenhouse Frost Protection Window Controller
-<img width="1500" height="1200" alt="image" src="https://github.com/user-attachments/assets/4f944113-dcd0-4d11-82bb-e121224c6db8" />
 
-
+<img width="1500" height="1200" alt="Greenhouse Frost Protection Window Controller" src="https://github.com/user-attachments/assets/4f944113-dcd0-4d11-82bb-e121224c6db8" />
 
 **RTL-to-GDSII ASIC design on SkyWater SKY130 (`sky130_fd_sc_hd`)**
 
@@ -22,6 +21,13 @@
 3. [Architecture](#3-architecture)
 4. [Repository Structure](#4-repository-structure)
 5. [Design Flow and Results](#5-design-flow-and-results)
+   - [5.1 RTL Simulation](#51-rtl-simulation-icarus-verilog)
+   - [5.2 Logic Synthesis](#52-logic-synthesis-yosys--abc)
+   - [5.3 Pre-Layout STA](#53-pre-layout-sta-opensta-16-pvt-corners)
+   - [5.4 Gate-Level Simulation](#54-gate-level-simulation)
+   - [5.5 Physical Design](#55-physical-design-openlane-v021)
+   - [5.6 Post-Layout STA](#56-post-layout-sta-spef-16-corners)
+   - [5.7 Pre-Layout vs Post-Layout STA Graphs](#57-pre-layout-vs-post-layout-sta-graphs)
 6. [Physical Design Gallery](#6-physical-design-gallery)
 7. [Design Decisions](#7-design-decisions)
 8. [Limitations](#8-limitations)
@@ -32,7 +38,7 @@
 
 ## 1. Overview
 
-A small digital controller that protects a greenhouse from frost. It reads an 8-bit temperature value and decides whether to **open** or **close** a ventilation window, raises a **frost alarm** at very low temperature, and lets a person override it manually. The design is taken from RTL all the way to a signed-off GDSII layout on the open SKY130 process.
+A small digital controller that protects a greenhouse from frost. It reads an 8-bit temperature value and decides whether to **open** or **close** a ventilation window, raises a **frost alarm** at very low temperature, and lets a person override it manually. The design is taken from RTL through synthesis, physical design, and timing analysis on the open SKY130 process.
 
 **Highlights**
 
@@ -40,7 +46,7 @@ A small digital controller that protects a greenhouse from frost. It reads an 8-
 - **Manual override** (manual close has priority over manual open)
 - **Motor interlock**: both motors are never on at the same time
 - Synchronous reset that forces all outputs to a safe state
-- Full flow completed: RTL sim, synthesis, 16-corner STA (pre and post layout), gate-level sim, place and route, DRC/LVS clean
+- RTL simulation, synthesis, 16-corner pre- and post-layout STA, gate-level simulation, place and route, and reported DRC/LVS checks
 
 ---
 
@@ -52,16 +58,16 @@ The temperature input is an unsigned 8-bit value encoded as **°C + 40**, so the
 |---|---|---|
 | `≤ 42` | ≤ 2 °C | Close window |
 | `≥ 45` | ≥ 5 °C | Open window |
-| `43 – 44` | 3–4 °C | **Hold** previous state (hysteresis dead-band) |
+| `43–44` | 3–4 °C | **Hold** previous state (hysteresis dead-band) |
 | `≤ 40` | ≤ 0 °C | **Frost alarm** asserted |
-| `manual_close = 1` | any | Force close (**highest priority**) |
-| `manual_open = 1` (and no manual close) | any | Force open |
-| `reset = 1` | any | All outputs 0, FSM to idle |
+| `manual_close = 1` | Any | Force close (**highest priority**) |
+| `manual_open = 1` (and no manual close) | Any | Force open |
+| `reset = 1` | Any | All outputs 0, FSM to idle |
 
 ### Interface
 
 | Port | Dir | Width | Description |
-|---|---|---|---|
+|---|---|---:|---|
 | `clk` | in | 1 | Clock (50 ns period, 20 MHz) |
 | `reset` | in | 1 | Synchronous reset |
 | `temp_value` | in | 8 | Temperature, °C + 40 |
@@ -78,14 +84,14 @@ Total: 13 input pins and 5 output bits (4 output ports).
 
 ## 3. Architecture
 
-```
-            ┌───────────────────────────────┐
- temp_value ─►                               ├─► window_motor_open
- manual_open ─►   Threshold compare + FSM    ├─► window_motor_close
- manual_close─►   (S_IDLE / S_OPEN / S_CLOSED)├─► frost_alarm
- reset ──────►   2 × DFF (state register)    ├─► status[1:0]
- clk ────────►                               │
-            └───────────────────────────────┘
+```text
+             ┌────────────────────────────────┐
+temp_value ──►                                ├──► window_motor_open
+manual_open ─►  Threshold compare + FSM       ├──► window_motor_close
+manual_close►  (S_IDLE / S_OPEN / S_CLOSED)   ├──► frost_alarm
+reset ──────►  2 × DFF (state register)       ├──► status[1:0]
+clk ─────────►                                │
+             └────────────────────────────────┘
 ```
 
 **FSM states**
@@ -102,8 +108,8 @@ The state register is 2 flip-flops. Outputs are decoded from the state, with the
 
 ## 4. Repository Structure
 
-```
-GreenHouse-FrostController/
+```text
+GreenHouse_Frost_Controller/
 ├── rtl/            greenhouse_frost_controller.v      # design
 ├── tb/             greenhouse_frost_controller_tb.v   # self-checking testbench (10 tests)
 ├── constraints/    greenhouse_frost_controller.sdc    # 50 ns clock, 0.1 ns uncertainty
@@ -114,7 +120,11 @@ GreenHouse-FrostController/
 │   └── comparison.txt
 ├── openlane/       config.json, config.tcl, pin_order.cfg
 ├── results/        GDS, Magic GDS, SPEF, routed netlist, final_summary_report.csv
-└── evidence/       gls/, logs/, netlist/, netlist_comparison/, rtl/, screenshots/
+└── evidence/
+    ├── graphs/     pre- and post-layout STA graphs
+    ├── gls/        RTL/GLS simulation evidence
+    ├── netlist/    mapped netlist graph
+    └── screenshots/ physical-design screenshots
 ```
 
 ---
@@ -140,12 +150,19 @@ Self-checking testbench, **10 / 10 tests pass**.
 
 ### 5.3 Pre-layout STA (OpenSTA, 16 PVT corners)
 
-Corners: `ff`, `ss`, `tt` across −40 / 25 / 100 °C and 1.28–1.95 V. **All 16 corners meet timing.**
+Corners: `ff`, `ss`, `tt` across −40 / 25 / 100 °C and 1.28–1.95 V. **All 16 corners meet timing** according to the supplied pre-layout summary.
 
-| | Worst case | Corner |
-|---|---|---|
+| Metric | Worst case | Corner |
+|---|---:|---|
 | Setup slack | **+44.02 ns** | `ss_n40C_1v28` |
 | Hold slack | **+0.19 ns** | `ff_n40C_1v95` |
+
+#### Pre-layout STA graphs
+
+The graphs below summarize setup slack, hold slack, worst negative slack (WNS), and total negative slack (TNS) across the 16 PVT corners.
+
+<img width="2084" height="1300" alt="greenhouse_pre_sta_all_4" src="https://github.com/user-attachments/assets/6a8e84c8-d85c-436e-a719-8c8e6f3736c1" />
+
 
 ### 5.4 Gate-level simulation
 
@@ -154,7 +171,7 @@ Mapped netlist simulated with the same 10 tests, **10 / 10 pass**. A functional 
 ![GLS](evidence/gls/gls_sim.png)
 
 | # | Test | Result |
-|---|---|---|
+|---:|---|---|
 | 1 | Reset behaviour | PASS |
 | 2 | 8 °C → open | PASS |
 | 3 | 2 °C → closed | PASS |
@@ -183,12 +200,32 @@ Mapped netlist simulated with the same 10 tests, **10 / 10 pass**. A functional 
 
 ### 5.6 Post-layout STA (SPEF, 16 corners)
 
-| | Worst case | Corner |
-|---|---|---|
+Post-layout timing analysis includes extracted parasitics from SPEF.
+
+| Metric | Worst case | Corner |
+|---|---:|---|
 | Setup slack | **+44.01 ns** | `ss_n40C_1v28` |
 | Hold slack | **+0.19 ns** | `ff_n40C_1v95` |
 
-Pre- to post-layout change is small: setup −0.150 to +0.020 ns, hold −0.010 to +0.230 ns. All 16 corners still meet timing.
+#### Post-layout STA graphs
+
+These graphs use the post-layout setup and hold values and the WNS/TNS values supplied for the 16 corners.
+
+<img width="2084" height="1300" alt="greenhouse_post_sta_all_4" src="https://github.com/user-attachments/assets/845c1a28-4f9c-4b83-923a-9b85db70a8c9" />
+
+
+### 5.7 Pre-layout vs post-layout STA graphs
+
+The pre-layout and post-layout plots provide a visual comparison of timing margins before and after extracted parasitics are included. The supplied data shows positive setup and hold slack at all 16 corners, with WNS and TNS set to `0.00 ns` for every corner.
+
+| Metric | Pre-layout worst case | Post-layout worst case |
+|---|---:|---:|
+| Setup slack | +44.02 ns | +44.01 ns |
+| Hold slack | +0.19 ns | +0.19 ns |
+| WNS | 0.00 ns at all corners | 0.00 ns at all corners |
+| TNS | 0.00 ns at all corners | 0.00 ns at all corners |
+
+**Timing-data note:** The graph images are generated from the hardcoded values supplied for the pre-layout and post-layout scripts. For a reproducible report, keep those images in `evidence/graphs/` with the exact filenames shown above. Confirm the WNS/TNS values against the actual OpenSTA summary files before treating the plots as sign-off evidence.
 
 ---
 
@@ -239,7 +276,8 @@ iverilog -g2012 -o tb.vvp rtl/*.v tb/*.v && vvp tb.vvp
 # 2. Synthesis
 cd synthesis && yosys -l synth.log synth.ys
 
-# 3. Pre-layout STA: OpenSTA with constraints/*.sdc over 16 SKY130 corners (see timing/prelayout)
+# 3. Pre-layout STA
+# Run OpenSTA with constraints/SDC over the 16 SKY130 corners (see timing/prelayout).
 
 # 4. Gate-level simulation
 iverilog -g2012 -DSKY130_FD_SC_HD__DFXTP_1_V -o greenhouse_gls.vvp \
@@ -248,16 +286,17 @@ iverilog -g2012 -DSKY130_FD_SC_HD__DFXTP_1_V -o greenhouse_gls.vvp \
 vvp greenhouse_gls.vvp
 
 # 5. Physical design (OpenLane v0.21, Docker)
-#    PDK = sky130A, DIE_AREA = 0 0 100 100, config in openlane/
+# PDK = sky130A, DIE_AREA = 0 0 100 100, config in openlane/
 
-# 6. Post-layout STA: OpenSTA with results/*.spef over 16 corners (see timing/postlayout)
+# 6. Post-layout STA
+# Run OpenSTA with extracted SPEF over the 16 corners (see timing/postlayout).
 ```
 
 ---
 
 ## 10. Author
 
-**C ABHIJITH**
-Roll No: **24EG104C36**
-Branch: **ECE-C**
+**C ABHIJITH**  
+Roll No: **24EG104C36**  
+Branch: **ECE-C**  
 GitHub: [cpatilabhijith](https://github.com/cpatilabhijith)
