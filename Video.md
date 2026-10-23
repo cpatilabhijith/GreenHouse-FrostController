@@ -12,7 +12,7 @@ This file collects the project demonstration video, presentation, and formal pro
 
 ## 💻 Source Code and Repository
 
-[**Open Greenhouse Frost Protection Controller GitHub Repository**](https://github.com/cpatilabhijith/GreenHouse_Frost_Controller)
+[**Open Greenhouse Frost Protection Controller GitHub Repository**](https://github.com/cpatilabhijith/GreenHouse-FrostController)
 
 The repository contains the project source and associated implementation files. Check the repository for the exact files currently available, including RTL, testbenches, synthesis scripts, constraints, timing scripts, gate-level simulation files, physical-design configuration, and reports.
 
